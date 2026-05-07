@@ -1,0 +1,21 @@
+.{
+    .name = .mosh,
+    .version = "0.0.0",
+    .fingerprint = 0xecf8bf80d60ec81f,
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "compress.zig",
+        "core.zig",
+        "crypto.zig",
+        "ffi.zig",
+        "mosh_ffi.h",
+        "protolite.zig",
+        "root.zig",
+        "simulation.zig",
+        "socket.zig",
+        "test_live.zig",
+        "types.zig",
+        "wire.zig",
+    },
+}
