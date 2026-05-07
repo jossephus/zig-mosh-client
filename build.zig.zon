@@ -5,17 +5,6 @@
     .paths = .{
         "build.zig",
         "build.zig.zon",
-        "compress.zig",
-        "core.zig",
-        "crypto.zig",
-        "ffi.zig",
-        "mosh_ffi.h",
-        "protolite.zig",
-        "root.zig",
-        "simulation.zig",
-        "socket.zig",
-        "test_live.zig",
-        "types.zig",
-        "wire.zig",
+        "src",
     },
 }
