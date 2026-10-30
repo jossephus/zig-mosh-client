@@ -25,14 +25,15 @@ const CreateConfigJson = struct {
     compressionAlgorithm: ?[]const u8 = null,
 };
 
-/// Monotonic milliseconds for the transport timers. `.boot` keeps counting
-/// across device suspend so session timeouts still expire after a sleep.
-/// Zig 0.17 routes clocks through `std.Io`; this C ABI has no caller-provided
-/// Io, so it uses the process-wide instance.
-fn nowMs() u64 {
-    const io = std.Io.Threaded.global_single_threaded.io();
-    return @intCast(@max(std.Io.Timestamp.now(io, .boot).toMilliseconds(), 0));
-}
+const Handle = struct {
+    client: core.Client,
+    threaded: std.Io.Threaded,
+
+    fn nowMs(self: *Handle) u64 {
+        const io = self.threaded.io();
+        return @intCast(@max(std.Io.Timestamp.now(io, .boot).toMilliseconds(), 0));
+    }
+};
 
 pub export fn mosh_client_abi_version() callconv(.c) u32 {
     return types.ABI_VERSION;
@@ -86,24 +87,29 @@ pub export fn mosh_client_create(config_json: ?[*:0]const u8, out_handle: ?*?*an
         .key_base64_22 = endpoint_key,
     };
 
-    const client = allocator.create(core.Client) catch return @backingInt(types.ErrorCode.alloc_failed);
-    client.* = core.Client.init(allocator, endpoint, config) catch |err| {
-        allocator.destroy(client);
-        return @backingInt(mapCoreError(err));
+    const handle = allocator.create(Handle) catch return @backingInt(types.ErrorCode.alloc_failed);
+    handle.* = .{
+        .client = core.Client.init(allocator, endpoint, config) catch |err| {
+            allocator.destroy(handle);
+            return @backingInt(mapCoreError(err));
+        },
+        .threaded = .init(allocator, .{}),
     };
 
-    out.* = @ptrCast(client);
+    out.* = @ptrCast(handle);
     return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_start(handle: ?*anyopaque) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
-    client.start(nowMs()) catch |err| return @backingInt(mapCoreError(err));
+    const h = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const client = &h.client;
+    client.start(h.nowMs()) catch |err| return @backingInt(mapCoreError(err));
     return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_send_input(handle: ?*anyopaque, ptr: ?[*]const u8, len: usize) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const h = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const client = &h.client;
     if (len > 0 and ptr == null) return @backingInt(types.ErrorCode.invalid_argument);
 
     const bytes: []const u8 = if (len == 0)
@@ -111,13 +117,14 @@ pub export fn mosh_client_send_input(handle: ?*anyopaque, ptr: ?[*]const u8, len
     else
         ptr.?[0..len];
 
-    client.sendInput(bytes, nowMs()) catch |err| return @backingInt(mapCoreError(err));
+    client.sendInput(bytes, h.nowMs()) catch |err| return @backingInt(mapCoreError(err));
     return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_resize(handle: ?*anyopaque, cols: i32, rows: i32) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
-    client.resize(cols, rows, nowMs()) catch |err| return @backingInt(mapCoreError(err));
+    const h = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const client = &h.client;
+    client.resize(cols, rows, h.nowMs()) catch |err| return @backingInt(mapCoreError(err));
     return @backingInt(types.ErrorCode.ok);
 }
 
@@ -131,7 +138,8 @@ pub export fn mosh_client_poll_output(
     out_rows: ?*i32,
     out_echo_ack: ?*u64,
 ) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const h = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const client = &h.client;
 
     if (out_written) |slot| slot.* = 0;
     if (out_event_type) |slot| slot.* = @backingInt(types.OutputEventType.none);
@@ -158,38 +166,44 @@ pub export fn mosh_client_poll_output(
 }
 
 pub export fn mosh_client_poll_state(handle: ?*anyopaque, out_state: ?*types.RuntimeState) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const h = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const client = &h.client;
     const state_slot = out_state orelse return @backingInt(types.ErrorCode.invalid_argument);
     state_slot.* = client.runtimeState();
     return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_maintenance_tick(handle: ?*anyopaque) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
-    client.maintenanceTick(nowMs()) catch |err| return @backingInt(mapCoreError(err));
+    const h = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const client = &h.client;
+    client.maintenanceTick(h.nowMs()) catch |err| return @backingInt(mapCoreError(err));
     return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_pump_network(handle: ?*anyopaque) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
-    client.pumpNetwork(nowMs()) catch |err| return @backingInt(mapCoreError(err));
+    const h = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const client = &h.client;
+    client.pumpNetwork(h.nowMs()) catch |err| return @backingInt(mapCoreError(err));
     return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_stop(handle: ?*anyopaque) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const h = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const client = &h.client;
     client.stop() catch |err| return @backingInt(mapCoreError(err));
     return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_destroy(handle: ?*anyopaque) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const h = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const client = &h.client;
     client.deinit();
-    allocator.destroy(client);
+    h.threaded.deinit();
+    allocator.destroy(h);
     return @backingInt(types.ErrorCode.ok);
 }
 
-fn fromHandle(handle: ?*anyopaque) ?*core.Client {
+fn fromHandle(handle: ?*anyopaque) ?*Handle {
     const raw = handle orelse return null;
     return @ptrCast(@alignCast(raw));
 }

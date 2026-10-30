@@ -10,8 +10,6 @@ const types = @import("types.zig");
 // Zlib backend (always available)
 // ---------------------------------------------------------------------------
 const zlib = struct {
-    // Zig 0.17 removed @cImport. These mirror the zlib.h declarations for the
-    // three calls we make; zlib's ABI for them has been stable since 1.0.
     const c = struct {
         const uLong = c_ulong;
         const uLongf = c_ulong;

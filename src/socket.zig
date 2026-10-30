@@ -1,8 +1,6 @@
 //! Cross-platform UDP socket wrapper for mosh transport.
 //!
-//! Uses libc sockets directly for Android/iOS compatibility. Zig 0.17 removed
-//! the std.posix socket wrappers in favor of std.Io.net, whose blocking model
-//! does not fit the non-blocking pump loop in core.zig.
+//! Uses POSIX sockets directly for Android/iOS compatibility.
 
 const std = @import("std");
 const c = std.c;
@@ -46,8 +44,6 @@ pub const MoshSocket = struct {
         if (rc < 0) return SocketError.CreateFailed;
         const sock: c.fd_t = rc;
         errdefer _ = c.close(sock);
-        // Darwin's socket() rejects SOCK_NONBLOCK/SOCK_CLOEXEC, so set both
-        // with fcntl, which works on every platform we target.
         try setFdFlags(sock);
 
         const addr: c.sockaddr.in = .{
@@ -74,7 +70,6 @@ pub const MoshSocket = struct {
         const parsed = std.Io.net.Ip4Address.parse(host, port) catch return SocketError.ResolveFailed;
         self.remote_addr = .{
             .port = std.mem.nativeToBig(u16, port),
-            // `bytes` is already in network order, as sin_addr expects.
             .addr = @bitCast(parsed.bytes),
         };
     }
