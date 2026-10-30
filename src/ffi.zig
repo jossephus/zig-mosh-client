@@ -25,8 +25,13 @@ const CreateConfigJson = struct {
     compressionAlgorithm: ?[]const u8 = null,
 };
 
+/// Monotonic milliseconds for the transport timers. `.boot` keeps counting
+/// across device suspend so session timeouts still expire after a sleep.
+/// Zig 0.17 routes clocks through `std.Io`; this C ABI has no caller-provided
+/// Io, so it uses the process-wide instance.
 fn nowMs() u64 {
-    return @intCast(@max(std.time.milliTimestamp(), 0));
+    const io = std.Io.Threaded.global_single_threaded.io();
+    return @intCast(@max(std.Io.Timestamp.now(io, .boot).toMilliseconds(), 0));
 }
 
 pub export fn mosh_client_abi_version() callconv(.c) u32 {
@@ -34,7 +39,7 @@ pub export fn mosh_client_abi_version() callconv(.c) u32 {
 }
 
 pub export fn mosh_client_create(config_json: ?[*:0]const u8, out_handle: ?*?*anyopaque) callconv(.c) c_int {
-    const out = out_handle orelse return @intFromEnum(types.ErrorCode.invalid_argument);
+    const out = out_handle orelse return @backingInt(types.ErrorCode.invalid_argument);
     out.* = null;
 
     var endpoint_host: []const u8 = "127.0.0.1";
@@ -50,7 +55,7 @@ pub export fn mosh_client_create(config_json: ?[*:0]const u8, out_handle: ?*?*an
                 allocator,
                 json_slice,
                 .{ .ignore_unknown_fields = true },
-            ) catch return @intFromEnum(types.ErrorCode.invalid_argument);
+            ) catch return @backingInt(types.ErrorCode.invalid_argument);
             defer parsed.deinit();
 
             if (parsed.value.host) |host| endpoint_host = host;
@@ -81,39 +86,39 @@ pub export fn mosh_client_create(config_json: ?[*:0]const u8, out_handle: ?*?*an
         .key_base64_22 = endpoint_key,
     };
 
-    const client = allocator.create(core.Client) catch return @intFromEnum(types.ErrorCode.alloc_failed);
+    const client = allocator.create(core.Client) catch return @backingInt(types.ErrorCode.alloc_failed);
     client.* = core.Client.init(allocator, endpoint, config) catch |err| {
         allocator.destroy(client);
-        return @intFromEnum(mapCoreError(err));
+        return @backingInt(mapCoreError(err));
     };
 
     out.* = @ptrCast(client);
-    return @intFromEnum(types.ErrorCode.ok);
+    return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_start(handle: ?*anyopaque) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @intFromEnum(types.ErrorCode.bad_handle);
-    client.start(nowMs()) catch |err| return @intFromEnum(mapCoreError(err));
-    return @intFromEnum(types.ErrorCode.ok);
+    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    client.start(nowMs()) catch |err| return @backingInt(mapCoreError(err));
+    return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_send_input(handle: ?*anyopaque, ptr: ?[*]const u8, len: usize) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @intFromEnum(types.ErrorCode.bad_handle);
-    if (len > 0 and ptr == null) return @intFromEnum(types.ErrorCode.invalid_argument);
+    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    if (len > 0 and ptr == null) return @backingInt(types.ErrorCode.invalid_argument);
 
     const bytes: []const u8 = if (len == 0)
         &.{}
     else
         ptr.?[0..len];
 
-    client.sendInput(bytes, nowMs()) catch |err| return @intFromEnum(mapCoreError(err));
-    return @intFromEnum(types.ErrorCode.ok);
+    client.sendInput(bytes, nowMs()) catch |err| return @backingInt(mapCoreError(err));
+    return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_resize(handle: ?*anyopaque, cols: i32, rows: i32) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @intFromEnum(types.ErrorCode.bad_handle);
-    client.resize(cols, rows, nowMs()) catch |err| return @intFromEnum(mapCoreError(err));
-    return @intFromEnum(types.ErrorCode.ok);
+    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    client.resize(cols, rows, nowMs()) catch |err| return @backingInt(mapCoreError(err));
+    return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_poll_output(
@@ -126,62 +131,62 @@ pub export fn mosh_client_poll_output(
     out_rows: ?*i32,
     out_echo_ack: ?*u64,
 ) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @intFromEnum(types.ErrorCode.bad_handle);
+    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
 
     if (out_written) |slot| slot.* = 0;
-    if (out_event_type) |slot| slot.* = @intFromEnum(types.OutputEventType.none);
+    if (out_event_type) |slot| slot.* = @backingInt(types.OutputEventType.none);
     if (out_cols) |slot| slot.* = 0;
     if (out_rows) |slot| slot.* = 0;
     if (out_echo_ack) |slot| slot.* = 0;
 
-    if (cap > 0 and out_buf == null) return @intFromEnum(types.ErrorCode.invalid_argument);
+    if (cap > 0 and out_buf == null) return @backingInt(types.ErrorCode.invalid_argument);
 
     const out_slice: []u8 = if (cap == 0)
         &.{}
     else
         out_buf.?[0..cap];
 
-    const result = client.pollOutput(out_slice) catch |err| return @intFromEnum(mapCoreError(err));
+    const result = client.pollOutput(out_slice) catch |err| return @backingInt(mapCoreError(err));
 
     if (out_written) |slot| slot.* = result.written;
-    if (out_event_type) |slot| slot.* = @intFromEnum(result.event_type);
+    if (out_event_type) |slot| slot.* = @backingInt(result.event_type);
     if (out_cols) |slot| slot.* = result.cols;
     if (out_rows) |slot| slot.* = result.rows;
     if (out_echo_ack) |slot| slot.* = result.echo_ack;
 
-    return @intFromEnum(types.ErrorCode.ok);
+    return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_poll_state(handle: ?*anyopaque, out_state: ?*types.RuntimeState) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @intFromEnum(types.ErrorCode.bad_handle);
-    const state_slot = out_state orelse return @intFromEnum(types.ErrorCode.invalid_argument);
+    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    const state_slot = out_state orelse return @backingInt(types.ErrorCode.invalid_argument);
     state_slot.* = client.runtimeState();
-    return @intFromEnum(types.ErrorCode.ok);
+    return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_maintenance_tick(handle: ?*anyopaque) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @intFromEnum(types.ErrorCode.bad_handle);
-    client.maintenanceTick(nowMs()) catch |err| return @intFromEnum(mapCoreError(err));
-    return @intFromEnum(types.ErrorCode.ok);
+    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    client.maintenanceTick(nowMs()) catch |err| return @backingInt(mapCoreError(err));
+    return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_pump_network(handle: ?*anyopaque) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @intFromEnum(types.ErrorCode.bad_handle);
-    client.pumpNetwork(nowMs()) catch |err| return @intFromEnum(mapCoreError(err));
-    return @intFromEnum(types.ErrorCode.ok);
+    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    client.pumpNetwork(nowMs()) catch |err| return @backingInt(mapCoreError(err));
+    return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_stop(handle: ?*anyopaque) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @intFromEnum(types.ErrorCode.bad_handle);
-    client.stop() catch |err| return @intFromEnum(mapCoreError(err));
-    return @intFromEnum(types.ErrorCode.ok);
+    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
+    client.stop() catch |err| return @backingInt(mapCoreError(err));
+    return @backingInt(types.ErrorCode.ok);
 }
 
 pub export fn mosh_client_destroy(handle: ?*anyopaque) callconv(.c) c_int {
-    const client = fromHandle(handle) orelse return @intFromEnum(types.ErrorCode.bad_handle);
+    const client = fromHandle(handle) orelse return @backingInt(types.ErrorCode.bad_handle);
     client.deinit();
     allocator.destroy(client);
-    return @intFromEnum(types.ErrorCode.ok);
+    return @backingInt(types.ErrorCode.ok);
 }
 
 fn fromHandle(handle: ?*anyopaque) ?*core.Client {

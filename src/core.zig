@@ -494,7 +494,7 @@ pub const Client = struct {
 
             var line = std.ArrayList(u8).empty;
             defer line.deinit(self.allocator);
-            try line.writer(self.allocator).print("retransmit state={d} retry={d}", .{ state_num, pending.retry_count });
+            try line.print(self.allocator, "retransmit state={d} retry={d}", .{ state_num, pending.retry_count });
             try self.enqueueEvent(.{
                 .event_type = .diagnostic,
                 .payload = try self.allocator.dupe(u8, line.items),
@@ -887,7 +887,7 @@ pub const Client = struct {
                             .echo_ack = 0,
                         });
                     },
-                    .echo_ack => |_| {
+                    .echo_ack => {
                         try self.enqueueEvent(.{
                             .event_type = .echo_ack,
                             .payload = try self.allocator.dupe(u8, &.{}),
@@ -1356,7 +1356,7 @@ test "two clients exchange keystrokes over real UDP socket" {
     try client.pumpNetwork(10);
 
     // Give the kernel a moment
-    std.Thread.sleep(2_000_000);
+    try std.Io.sleep(std.testing.io, .fromMilliseconds(2), .awake);
 
     // Server receives and processes
     try server.pumpNetwork(12);

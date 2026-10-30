@@ -10,7 +10,19 @@ const types = @import("types.zig");
 // Zlib backend (always available)
 // ---------------------------------------------------------------------------
 const zlib = struct {
-    const c = @cImport(@cInclude("zlib.h"));
+    // Zig 0.17 removed @cImport. These mirror the zlib.h declarations for the
+    // three calls we make; zlib's ABI for them has been stable since 1.0.
+    const c = struct {
+        const uLong = c_ulong;
+        const uLongf = c_ulong;
+        const Z_OK: c_int = 0;
+        const Z_BUF_ERROR: c_int = -5;
+        const Z_DEFAULT_COMPRESSION: c_int = -1;
+
+        extern fn compressBound(source_len: uLong) uLong;
+        extern fn compress2(dest: [*]u8, dest_len: *uLongf, source: [*]const u8, source_len: uLong, level: c_int) c_int;
+        extern fn uncompress(dest: [*]u8, dest_len: *uLongf, source: [*]const u8, source_len: uLong) c_int;
+    };
 
     pub fn compress(allocator: std.mem.Allocator, data: []const u8) CompressError![]u8 {
         if (data.len == 0) return allocator.dupe(u8, &.{}) catch CompressError.BufferTooSmall;

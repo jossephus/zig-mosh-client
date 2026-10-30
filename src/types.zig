@@ -107,8 +107,8 @@ pub fn toRuntimeState(
     current_rto_ms: u32,
 ) RuntimeState {
     return .{
-        .state = @intFromEnum(state),
-        .last_failure_code = @intFromEnum(failure),
+        .state = @backingInt(state),
+        .last_failure_code = @backingInt(failure),
         .last_state_num_sent = last_state_num_sent,
         .last_state_num_received = last_state_num_received,
         .pending_outbound = pending_outbound,

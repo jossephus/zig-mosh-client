@@ -333,7 +333,7 @@ fn readFieldHeader(data: []const u8, cursor: *usize) ProtoLiteError!struct { fie
     if (field_number == 0) return ProtoLiteError.InvalidFieldNumber;
 
     const wire_value = key & 0x07;
-    const wire_type = std.meta.intToEnum(WireType, wire_value) catch return ProtoLiteError.UnsupportedWireType;
+    const wire_type = std.enums.fromInt(WireType, wire_value) orelse return ProtoLiteError.UnsupportedWireType;
     return .{ .field_number = field_number, .wire_type = wire_type };
 }
 
@@ -383,7 +383,7 @@ fn skipBytes(data: []const u8, cursor: *usize, count: usize) ProtoLiteError!void
 }
 
 fn writeTag(out: *std.ArrayList(u8), allocator: std.mem.Allocator, field_number: u64, wire_type: WireType) !void {
-    try writeVarint(out, allocator, (field_number << 3) | @intFromEnum(wire_type));
+    try writeVarint(out, allocator, (field_number << 3) | @backingInt(wire_type));
 }
 
 fn writeVarintField(out: *std.ArrayList(u8), allocator: std.mem.Allocator, field_number: u64, value: u64) !void {

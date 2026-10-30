@@ -24,7 +24,7 @@ pub fn timestampDiff(new: u16, old: u16) u16 {
 }
 
 pub fn directionalSequence(sequence: u64, direction: Direction) u64 {
-    const direction_bit: u64 = @as(u64, @intFromEnum(direction)) << 63;
+    const direction_bit: u64 = @as(u64, @backingInt(direction)) << 63;
     const sequence_mask: u64 = std.math.maxInt(u64) ^ (@as(u64, 1) << 63);
     return direction_bit | (sequence & sequence_mask);
 }
@@ -262,7 +262,7 @@ test "isFragmentPayload heuristic" {
     try std.testing.expect(!isFragmentPayload(protobuf));
 
     // Too short to be a fragment
-    try std.testing.expect(!isFragmentPayload(&[_]u8{0x00, 0x00}));
+    try std.testing.expect(!isFragmentPayload(&[_]u8{ 0x00, 0x00 }));
 
     // Empty
     try std.testing.expect(!isFragmentPayload(&[_]u8{}));

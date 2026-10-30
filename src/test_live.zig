@@ -135,11 +135,11 @@ pub fn main() !void {
 
         // Check session state
         const state = client.runtimeState();
-        if (state.state == @intFromEnum(mosh.types.SessionState.failed)) {
+        if (state.state == @backingInt(mosh.types.SessionState.failed)) {
             std.debug.print("\n[SESSION FAILED] code={d}\n", .{state.last_failure_code});
             break;
         }
-        if (state.state == @intFromEnum(mosh.types.SessionState.stopped)) {
+        if (state.state == @backingInt(mosh.types.SessionState.stopped)) {
             std.debug.print("\n[SESSION STOPPED]\n", .{});
             break;
         }
